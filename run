@@ -1,0 +1,5 @@
+#!/bin/sh
+
+SRC=${1:-boards/easy.txt}
+
+gcc main.c -o cdoku && ./cdoku $SRC
