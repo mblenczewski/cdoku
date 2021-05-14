@@ -15,17 +15,7 @@
 CELL *board = NULL;
 unsigned int board_size = 0, board_grid_size = 0, board_cell_size = 0, board_line_size = 0;
 
-const unsigned int BOARD_MAX_CELL_SIZE = 7;
-const unsigned int BOARD_MAX_LINE_SIZE = BOARD_MAX_CELL_SIZE * BOARD_MAX_CELL_SIZE;
-const unsigned int BOARD_MAX_SIZE = BOARD_MAX_LINE_SIZE * BOARD_MAX_LINE_SIZE;
-
-// MAX_INPUT_LINE_SIZE = number of numbers per line + number of value separators + number of cell separators + newline + null byte
-const unsigned int MAX_INPUT_LINE_SIZE = BOARD_MAX_LINE_SIZE + (BOARD_MAX_LINE_SIZE - BOARD_MAX_CELL_SIZE) + (BOARD_MAX_CELL_SIZE - 1) + 2;
-
 const char BOARD_EMPTY = '.', BOARD_CSEP = ',', BOARD_VWALL = '|', BOARD_HWALL = '=', BOARD_JOIN = '#';
-const char INPUT_CSEP[] = { BOARD_CSEP, '\0' };
-const char INPUT_VWALL[] = { BOARD_VWALL, '\0' };
-const char INPUT_HWALL[] = { BOARD_HWALL, '\0' };
 
 // if defined, will ignore sudoku grid and construct test matrix for dlx
 #define DLX_TESTING
@@ -72,6 +62,9 @@ bool try_read_board(FILE *input) {
 	static char buf[4096];
 	const size_t BUF_SIZE = sizeof(buf) / sizeof(char);
 
+	const char INPUT_CSEP[] = { BOARD_CSEP, '\0' };
+	const char INPUT_VWALL[] = { BOARD_VWALL, '\0' };
+
 	// get first line in sudoku grid
 	char *line = fgets(buf, BUF_SIZE, input);
 
@@ -116,13 +109,7 @@ bool try_read_board(FILE *input) {
 		while (cell) {
 			char *value = strtok_r(cell, INPUT_CSEP, &value_saveptr);
 			while (value) {
-				CELL parsed = strtoul(value, NULL, 10);
-
-				if (parsed) {
-					board_set(i++, j, parsed);
-				} else {
-					board_set(i++, j, 0);
-				}
+				board_set(i++, j, strtoul(value, NULL, 10));
 
 				value = strtok_r(NULL, INPUT_CSEP, &value_saveptr);
 			}
@@ -256,10 +243,7 @@ void link_nodes(struct dlx_node *a, struct dlx_node *b, linkmask_t mask) {
 // converts the board into a sparse matrix.
 struct dlx_matrix *matrix_create() {
 	struct dlx_matrix *mat = malloc(sizeof(struct dlx_matrix));
-
-	// TODO(mikolaj): map sudoku into an exact cover (hitting set) problem
-
-	// NOTE(mikolaj): temporary example dlx matrix
+	
 	mat->solved = false;
 
 	// we need to create the header value for our columns
@@ -384,25 +368,6 @@ void matrix_free(struct dlx_matrix *val) {
 	free(val);
 }
 
-
-void matrix_print(struct dlx_node *root) {
-	struct dlx_node *curr = root;
-
-	do {
-		if (curr->type == DLX_TYPE_COLUMN) {
-			printf("%lu(%lu): ", curr->column.id, curr->column.count);
-
-			for (struct dlx_node *elem = curr->down; elem != curr; elem = elem->down) {
-				printf("elem(%lu) ", elem->data.row_id);
-			}
-
-			printf("\n");
-		}
-
-		curr = curr->right;
-	} while (curr && curr != root);
-}
-
 struct dlx_node *choose_min_length_column(struct dlx_matrix *matrix) {
 	size_t min_count = (2 << sizeof(size_t)) - 1;
 
@@ -480,8 +445,8 @@ void step_print(unsigned int k, const char *format, ...) {
 #endif
 }
 
-bool dlx_solve_impl(struct dlx_matrix *matrix, unsigned int k, struct dlx_node ***solution, size_t *solution_len);
-bool dlx_solve_impl(struct dlx_matrix *matrix, unsigned int k, struct dlx_node ***solution, size_t *solution_len) {
+bool solve_impl(struct dlx_matrix *matrix, unsigned int k, struct dlx_node ***solution, size_t *solution_len);
+bool solve_impl(struct dlx_matrix *matrix, unsigned int k, struct dlx_node ***solution, size_t *solution_len) {
 	struct dlx_node *root = matrix->root;
 
 	step_print(k, "Solve(%u):\n", k);
@@ -512,7 +477,7 @@ bool dlx_solve_impl(struct dlx_matrix *matrix, unsigned int k, struct dlx_node *
 			cover_column(node->data.parent);
 		}
 
-		if (dlx_solve_impl(matrix, k + 1, solution, solution_len)) {
+		if (solve_impl(matrix, k + 1, solution, solution_len)) {
 			matrix->solved = true;
 		}
 
@@ -535,8 +500,8 @@ bool dlx_solve_impl(struct dlx_matrix *matrix, unsigned int k, struct dlx_node *
 	return matrix->solved;
 }
 
-bool dlx_solve(struct dlx_matrix *matrix, struct dlx_node ***solution, size_t *solution_len) {
-	return dlx_solve_impl(matrix, 0, solution, solution_len);
+bool solve(struct dlx_matrix *matrix, struct dlx_node ***solution, size_t *solution_len) {
+	return solve_impl(matrix, 0, solution, solution_len);
 }
 
 int main(int argc, char **argv) {
@@ -566,7 +531,7 @@ int main(int argc, char **argv) {
 	struct dlx_node **solution = NULL;
 	size_t solution_len = 0;
 
-	if (!dlx_solve(board_repr, &solution, &solution_len)) {
+	if (!solve(board_repr, &solution, &solution_len)) {
 		printf("Failed to find a solution!\n");
 		matrix_free(board_repr);
 		free(solution);
